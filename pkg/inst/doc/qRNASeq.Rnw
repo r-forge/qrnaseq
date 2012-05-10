@@ -1,0 +1,84 @@
+\documentclass[11pt]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{Sweave}
+\newcommand{\Rfunction}[1]{{\texttt{#1}}}
+\newcommand{\Robject}[1]{{\texttt{#1}}}
+\newcommand{\Rpackage}[1]{{\textit{#1}}}
+\newcommand{\Rclass}[1]{{\textit{#1}}}
+\title{An introduction to qRNASeq}
+\author{Qiang Hu, Li Yan, Dan Wang, Song Liu}
+\begin{document}
+\SweaveOpts{engine=R}
+%\VignetteIndexEntry{Using qRNASeq}
+\maketitle
+\tableofcontents
+
+\section{Introduction}
+qRNASeq is an R package to quantify RNA-seq data in different level, such as gene, exon, intron, UTR and exon junction. Given genomic annotation file and aligned sequence result, the package can produce the expression values with user-specified quantification method and genomic regions. The package read aligned sequence data of BAM format directly. The genomic annotation can be GTF, bed and GenePred format, which is available at most of the genomic databases, such as UCSC genome and Ensembl database.
+
+Two quantification methods are developed in the package. The reads counts define the expression levels with the total number of reads mapped in the given region. The RPKM value normalizes the counts by the region width, which can also be calculated in the package. The maximum depth (maxdepth) method estimate the expression level with maximum depth of the given region. 
+
+R packages, such as, edgeR, DESeq and beySeq, are well developed to analyze differential expressed genes for the RNA-seq platform. All of these packages require read counts as input data. Our package can be used to prepare the expression values for the subsequent analysis. In the future version, differential test functions will be developed and integrated in the package.
+
+\section{Work flow}
+The package is easy to use. Only three steps are needed to quantify RNA-seq data. First, we need to prepare the gene regions from the genomic annotation data. Then an aligned bam file is used to quantify expression levels in interested genomic regions. At last, the results can be summerized in gene level with different methods.
+\subsection{Load genomic annotation data}
+The package use \Robject{GRanges} class from the R package\Rpackage{GenomicRanges} to store the genome annotation data. The GTF, bed and GenePred formats are supported in our package. In the following example, a small GTF file built in the package will be used to define the gene regions.
+<<read annotation data>>=
+library("qRNASeq")
+gtffile <- system.file("extdata", "gene2.GTF", package="qRNASeq")
+gtfGRL <- read.GTF(file=gtffile, feature=c("exon", "CDS", "intron", "utr"))
+names(gtfGRL)
+head(gtfGRL$CDS)
+@ 
+The "gene2.GTF" contains two human gene annotation from Ensembl database. The function \Rfunction{read.GTF} can read GTF format file into a list of \Rclass{GRanges} objects as required in the feature option.
+
+\subsection{Quantification}
+To quantify gene expression levels, the mapped bam file and defined genomic regions are used in the function \Rfunction{QuanBam}. The genomic regions should be a \Rclass{GRanges} object from the last step. Gene\_id is necessary in the annotation columns of \Robject{elementMetadata} for each range, because Reads mapped in an exon can come from different transcripts. If the input ranges are annotated in transcript level, some of the regions from different transcripts but from the same gene can be overlapped. The read mapped in the overlapped regions can't be decided which transcript it belongs to. Therefore, we usually quantify abundance in gene level. 
+
+For example, we want to quantify the CDS regions of \Robject{gtfGRL}. First the gene\_id annotation should be added to these regions.
+<<quantification>>=
+tidx <- match(gtfGRL$CDS@elementMetadata$transcript_id,
+              gtfGRL$exon@elementMetadata$transcript_id)
+gtfGRL$CDS@elementMetadata$gene_id <- gtfGRL$exon@elementMetadata$gene_id[tidx]
+head(gtfGRL$CDS)
+@ 
+Then the function \Rfunction{QuanBam} can be used to quantify the expression values based on aligned bam file. There are two ways to handle the overlapped regions in the function. The first straightforward method is to unite all overlapped regions that are from different transcripts in the same genes. In this way, the regions of different transcripts will be reduced into new ranges in their gene levels. Reads from different transcripts but in the same ranges will be counted together.
+<<quantification>>=
+bamfile <- system.file("extdata", "gene2.bam", package="qRNASeq")
+cdsGR1 <- QuanBam(bam=bamfile, GR=gtfGRL$CDS, method="both",
+                  Reduce="union", ovtype="within")
+cdsGR1
+@ 
+Two methods can be used to quantify the data with the option "method", counts and maxdepth. The counts method calculates the total numbers of the reads that start in the region. The maxdepth method calculate the maximum of the depths in the interested regions. The two methods can be used a if "both" is selected in the option. The option "ovtype" is used to define the reads that correctly align to certain regions. The option with "within" means that the reads only mapped within the certain region are used in the quantification.
+
+Another way to reduce the overlapped regions is the intersection of the regions, which is defined as the most shared regions among the transcripts of a gene. For example, a gene has two transcripts, then the intersection ranges are the common regions that shared by the two transcripts.
+<<quantification>>=
+cdsGR2 <- QuanBam(bam=bamfile, GR=gtfGRL$CDS, method="both",
+                  Reduce="intersection", ovtype="any")
+cdsGR2
+@ 
+
+\subsection{Summary}
+The counts and mdepths results in exon or CDS level can be summarized to gene level by different methods, such as sum, mean, median, max, min and so on. RPKM is reads per kilobase of exon model per million mapped reads, which is also supported in the function \Rfunction{QuanGR}.
+<<summary>>=
+cdsRes1 <- QuanGR(cdsGR1, method="mean", Quan="mdepths", by="gene_id")
+cdsRes1
+cdsRes2 <- QuanGR(cdsGR1, method="sum", Quan="counts", by="gene_id")
+cdsRes2
+cdsRes3 <- QuanGR(cdsGR1, method="RPKM", Quan="counts", by="gene_id")
+cdsRes3
+@ 
+The results can be used as input data in the downstream differential expression analysis. Also the results with the abundance in different level can be used in the isoform analysis.
+
+%\section{Maximum depth vs. counts}
+\section{Differential expression}
+
+%\section{Case study}
+
+\section{Session information}
+<<session>>=
+sessionInfo()
+@ 
+
+\end{document}

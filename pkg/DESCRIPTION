@@ -1,0 +1,10 @@
+Package: qRNASeq
+Type: Package
+Title: What the package does (short line)
+Version: 0.0.1
+Date: 2012-03-14
+Author: Qiang Hu
+Maintainer: Qiang Hu <huqmail@gmail.com>
+Depends: R (>= 2.14.0), ShortRead, GenomicRanges, IRanges, Rsamtools
+Description: A package to quantify RNA-seq data in different gene level.
+License: GPL
